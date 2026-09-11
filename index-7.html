@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BlockStorm">
+<meta name="description" content="BLOCKSTORM - endloses Block-Puzzle mit Chain-Combos und Spezialblöcken.">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" href="./icon-192.png">
+<title>BLOCKSTORM</title>
+<style>
+:root{
+  --bg:#0b0f1e;
+  --panel:#161d33;
+  --line:rgba(255,255,255,.08);
+  --ink:#f2f5ff;
+  --dim:#79849f;
+  --acc:#4fd8ff;
+  --gold:#ffc93c;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --f:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{
+  font-family:var(--f);color:var(--ink);background:var(--bg);
+  overflow:hidden;overscroll-behavior:none;touch-action:manipulation;
+  user-select:none;-webkit-user-select:none;position:fixed;inset:0;
+}
+button{font-family:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation;}
+
+/* ---------------- Layout ---------------- */
+#app{position:absolute;inset:0;display:flex;flex-direction:column;
+  padding:calc(var(--safe-t) + 8px) 12px calc(var(--safe-b) + 8px);}
+
+#hud{flex:0 0 auto;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;}
+.side{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:800;
+  font-variant-numeric:tabular-nums;color:var(--dim);}
+.side .crown{color:var(--gold);font-size:13px;}
+.side.right{justify-content:flex-end;}
+.icon-btn{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.07);
+  display:grid;place-items:center;transition:transform .1s ease,background .15s;}
+.icon-btn:active{transform:scale(.9);background:rgba(255,255,255,.13);}
+.icon-btn svg{width:18px;height:18px;fill:none;stroke:var(--ink);stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round;}
+
+#scoreWrap{text-align:center;line-height:1;}
+#score{font-size:clamp(36px,11vw,54px);font-weight:800;letter-spacing:-2px;
+  font-variant-numeric:tabular-nums;transition:transform .09s cubic-bezier(.3,1.6,.5,1);}
+#score.bump{transform:scale(1.09);}
+#sub{margin-top:6px;font-size:10px;font-weight:800;letter-spacing:2px;color:var(--dim);}
+#sub b{color:var(--acc);}
+
+#comboBar{flex:0 0 auto;height:22px;margin:8px 2px 0;display:flex;align-items:center;gap:9px;
+  opacity:0;transition:opacity .2s ease;}
+#comboBar.on{opacity:1;}
+#comboTxt{font-size:11px;font-weight:900;letter-spacing:1.2px;color:var(--acc);white-space:nowrap;}
+#comboTrack{flex:1;height:4px;border-radius:99px;background:rgba(255,255,255,.09);overflow:hidden;}
+#comboFill{height:100%;width:0;border-radius:99px;background:var(--acc);
+  transition:width .3s cubic-bezier(.2,.9,.3,1),background .4s;}
+
+#stage{flex:1 1 auto;position:relative;min-height:0;}
+#game{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block;}
+
+#dock{flex:0 0 auto;display:flex;justify-content:center;gap:10px;padding-top:6px;}
+.pw{min-width:88px;height:46px;padding:0 14px;border-radius:14px;background:rgba(255,255,255,.06);
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  font-size:13px;font-weight:900;transition:transform .1s ease,background .15s,box-shadow .15s,opacity .15s;}
+.pw:active{transform:scale(.94);}
+.pw .em{font-size:18px;line-height:1;}
+.pw .cnt{color:var(--gold);font-variant-numeric:tabular-nums;}
+.pw.active{background:rgba(79,216,255,.16);box-shadow:inset 0 0 0 1.5px var(--acc);}
+.pw.empty{opacity:.35;}
+
+/* ---------------- Overlays ---------------- */
+.screen{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;
+  padding:calc(var(--safe-t) + 24px) 26px calc(var(--safe-b) + 24px);
+  background:linear-gradient(180deg,rgba(11,15,30,.97),rgba(11,15,30,.99));
+  text-align:center;transition:opacity .22s ease;}
+.screen.hide{opacity:0;pointer-events:none;}
+
+.brand{line-height:.9;margin-bottom:4px;}
+.brand .l1{font-size:clamp(42px,13vw,64px);font-weight:800;letter-spacing:-3px;color:#fff;}
+.brand .l2{font-size:clamp(42px,13vw,64px);font-weight:800;letter-spacing:-3px;color:var(--acc);}
+.bestline{font-size:11px;font-weight:800;letter-spacing:2.6px;color:var(--dim);margin-bottom:6px;}
+.bestline b{color:var(--gold);font-size:15px;letter-spacing:0;margin-left:8px;
+  font-variant-numeric:tabular-nums;}
+.kicker{font-size:11px;font-weight:900;letter-spacing:4px;color:var(--dim);}
+
+.btn{width:min(300px,80vw);padding:16px;border-radius:16px;font-size:15px;font-weight:800;
+  letter-spacing:1.4px;text-transform:uppercase;background:var(--acc);color:#062430;
+  transition:transform .09s ease,filter .15s;}
+.btn:active{transform:scale(.96);filter:brightness(.92);}
+.btn.ghost{background:rgba(255,255,255,.07);color:var(--ink);}
+.btn.sm{width:auto;padding:12px 22px;font-size:13px;}
+
+.iconrow{display:flex;gap:12px;margin-top:4px;}
+.iconrow .icon-btn{width:48px;height:48px;border-radius:15px;}
+
+.bigscore{font-size:clamp(46px,15vw,64px);font-weight:800;letter-spacing:-2.5px;color:var(--gold);
+  font-variant-numeric:tabular-nums;line-height:1;}
+.newbest{font-size:11px;font-weight:900;letter-spacing:3px;color:var(--acc);}
+.metaline{font-size:12px;color:var(--dim);font-weight:700;}
+
+.card{width:min(320px,84vw);background:var(--panel);border-radius:16px;padding:6px 16px;}
+.row{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:13px 0;border-bottom:1px solid var(--line);}
+.row:last-child{border-bottom:0;}
+.row .name{font-size:14px;font-weight:600;text-align:left;}
+.row .val{font-size:15px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums;}
+.sw{width:46px;height:27px;border-radius:99px;background:rgba(255,255,255,.13);
+  position:relative;transition:background .18s;flex:0 0 auto;}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;
+  background:#fff;transition:transform .18s cubic-bezier(.3,1.5,.5,1);}
+.sw.on{background:var(--acc);}
+.sw.on::after{transform:translateX(19px);}
+
+.doc{width:min(340px,88vw);max-height:56vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  text-align:left;font-size:13px;line-height:1.7;color:var(--dim);}
+.doc h4{color:var(--ink);font-size:12px;letter-spacing:2px;text-transform:uppercase;
+  margin:16px 0 6px;font-weight:900;}
+.doc h4:first-child{margin-top:0;}
+.doc b{color:var(--ink);}
+.doc .sp{color:var(--gold);font-weight:800;}
+
+#toast{position:absolute;left:50%;bottom:calc(var(--safe-b) + 74px);transform:translate(-50%,10px);
+  z-index:30;background:rgba(22,29,51,.96);padding:9px 16px;border-radius:99px;
+  font-size:12px;font-weight:800;opacity:0;transition:opacity .2s,transform .2s;
+  pointer-events:none;white-space:nowrap;}
+#toast.on{opacity:1;transform:translate(-50%,0);}
+.mini{font-size:10px;color:var(--dim);letter-spacing:1.4px;}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="hud">
+    <div class="side"><span class="crown">♛</span><span id="best">0</span></div>
+    <div id="scoreWrap">
+      <div id="score">0</div>
+      <div id="sub">LVL <b id="lvl">1</b></div>
+    </div>
+    <div class="side right">
+      <button class="icon-btn" id="btnPause" aria-label="Pause">
+        <svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="comboBar">
+    <div id="comboTxt">COMBO ×2</div>
+    <div id="comboTrack"><div id="comboFill"></div></div>
+  </div>
+
+  <div id="stage"><canvas id="game"></canvas></div>
+
+  <div id="dock">
+    <button class="pw" id="pwHammer"><span class="em">🔨</span><span class="cnt" id="cHammer">2</span></button>
+    <button class="pw" id="pwSwap"><span class="em">🔄</span><span class="cnt" id="cSwap">2</span></button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="screen" id="scStart">
+  <div class="brand"><div class="l1">BLOCK</div><div class="l2">STORM</div></div>
+  <div class="bestline">BESTWERT <b id="sBest">0</b></div>
+  <button class="btn" id="btnPlay">Spielen</button>
+  <button class="btn ghost" id="btnResume" style="display:none">Fortsetzen</button>
+  <div class="iconrow">
+    <button class="icon-btn" id="btnRules" aria-label="Regeln">
+      <svg viewBox="0 0 24 24"><path d="M9.1 9a3 3 0 1 1 4.2 2.7c-.8.4-1.3 1.1-1.3 2M12 17.5h.01"/></svg>
+    </button>
+    <button class="icon-btn" id="btnStats" aria-label="Statistik">
+      <svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>
+    </button>
+    <button class="icon-btn" id="btnSettings" aria-label="Optionen">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.9 14.7a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-2.9-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3.4a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.1-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 2.9 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.1a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="screen hide" id="scOver">
+  <div class="kicker">Game Over</div>
+  <div class="bigscore" id="oScore">0</div>
+  <div class="newbest" id="oNewBest" style="display:none">NEUER REKORD</div>
+  <div class="metaline" id="oMeta"></div>
+  <button class="btn" id="btnAgain">Nochmal</button>
+  <button class="btn ghost" id="btnHome">Menü</button>
+</div>
+
+<div class="screen hide" id="scPause">
+  <div class="kicker">Pause</div>
+  <div class="bigscore" id="pScore">0</div>
+  <button class="btn" id="btnContinue">Weiter</button>
+  <button class="btn ghost" id="btnPSettings">Optionen</button>
+  <button class="btn ghost sm" id="btnQuit">Runde beenden</button>
+</div>
+
+<div class="screen hide" id="scStats">
+  <div class="kicker">Statistik</div>
+  <div class="card">
+    <div class="row"><span class="name">Highscore</span><span class="val" id="tBest">0</span></div>
+    <div class="row"><span class="name">Beste Combo</span><span class="val" id="tCombo">×0</span></div>
+    <div class="row"><span class="name">Beste Kette</span><span class="val" id="tChain">×0</span></div>
+    <div class="row"><span class="name">Linien gesamt</span><span class="val" id="tLines">0</span></div>
+    <div class="row"><span class="name">Runden</span><span class="val" id="tGames">0</span></div>
+  </div>
+  <button class="btn" id="btnStatsBack">Zurück</button>
+</div>
+
+<div class="screen hide" id="scOpt">
+  <div class="kicker">Optionen</div>
+  <div class="card">
+    <div class="row"><span class="name">Sound</span><div class="sw" id="swSound"></div></div>
+    <div class="row"><span class="name">Vibration</span><div class="sw" id="swHaptic"></div></div>
+    <div class="row"><span class="name">Effekte</span><div class="sw" id="swFx"></div></div>
+    <div class="row"><span class="name">Platzier-Hilfe</span><div class="sw" id="swSnap"></div></div>
+    <div class="row"><span class="name">Fast volle Linien zeigen</span><div class="sw" id="swHint"></div></div>
+  </div>
+  <button class="btn" id="btnOptBack">Zurück</button>
+  <button class="btn ghost sm" id="btnWipe">Statistiken löschen</button>
+  <div class="mini">BLOCKSTORM v2</div>
+</div>
+
+<div class="screen hide" id="scRules">
+  <div class="kicker">Regeln</div>
+  <div class="doc">
+    <h4>Grundregel</h4>
+    Drei Teile aufs 8×8-Feld ziehen. Volle Reihen und Spalten lösen sich auf. Teile lassen sich nicht drehen. Passt kein Teil mehr, ist die Runde vorbei.
+
+    <h4>Punkte</h4>
+    2 pro gesetztem Block. 1 Linie 100, 2 Linien 300, 3 Linien 600, 4 Linien 1000, 5 Linien 1500. Dazu 5 pro aufgelöster Zelle.
+
+    <h4>Combo</h4>
+    Jeder Zug, der auflöst, erhöht die Combo. Multiplikator <b>1 + 0,4 pro Stufe</b>. Ein Zug ohne Auflösen setzt zurück — ab Combo 5 wird nur halbiert.
+
+    <h4>Kette</h4>
+    Sprengt ein Spezialblock weitere Spezialblöcke frei, zündet die nächste Welle mit ×1,5, ×2, ×2,5 …
+
+    <h4>Spezialblöcke</h4>
+    <span class="sp">◆ Gem</span> +300 Bonus<br>
+    <span class="sp">✦ Star</span> +200 und räumt die komplette Kreuzlinie<br>
+    <span class="sp">● Bombe</span> +150 und sprengt 3×3<br>
+    <span class="sp">×2 Boost</span> verdoppelt die ganze Welle, mehrere stapeln
+
+    <h4>Perfect Clear</h4>
+    Brett komplett leer: +5000 × Combo.
+
+    <h4>Power-ups</h4>
+    🔨 entfernt einen Block, 🔄 tauscht die restlichen Teile. Nachschub alle 20.000 bzw. 15.000 Punkte.
+  </div>
+  <button class="btn" id="btnRulesBack">Verstanden</button>
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   BLOCKSTORM v2
+   ========================================================================== */
+
+/* --------------------------------------------------------------- Speicher */
+const KEY = "blockstorm.v1";
+const mem = {};
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem(KEY+"."+k); return v===null?d:JSON.parse(v); }
+            catch(e){ return (k in mem)?mem[k]:d; } },
+  set(k,v){ try{ localStorage.setItem(KEY+"."+k, JSON.stringify(v)); }catch(e){ mem[k]=v; } },
+  del(k){ try{ localStorage.removeItem(KEY+"."+k); }catch(e){ delete mem[k]; } }
+};
+
+/* -------------------------------------------------------------- Konstanten */
+const G = 8, CELLS = 64;
+
+/* Blockfarben: l = Lichtfase oben/links, f = Frontfläche, d = Schattenfase */
+const COLORS = [
+  { l:"#ff8b96", f:"#f0384c", d:"#a3182a" },
+  { l:"#ffb968", f:"#f88420", d:"#a85000" },
+  { l:"#ffe17d", f:"#f6c01c", d:"#a67c00" },
+  { l:"#82e79b", f:"#2fbe58", d:"#177a36" },
+  { l:"#7fd9f7", f:"#1eb0ec", d:"#0a6f9c" },
+  { l:"#93a6ff", f:"#4763f2", d:"#2436a6" },
+  { l:"#c49bff", f:"#9147ee", d:"#5b1fa3" },
+  { l:"#ff97c8", f:"#f0489e", d:"#a3186a" }
+];
+
+/* Nur der Akzentton wechselt pro Level — der Hintergrund bleibt ruhig */
+const ACCENTS = [
+  { n:"CYAN",   c:"#4fd8ff" }, { n:"MINT",  c:"#3ddba4" },
+  { n:"AMBER",  c:"#ffb340" }, { n:"ROSE",  c:"#ff5f9e" },
+  { n:"VIOLET", c:"#9d7bff" }, { n:"LIME",  c:"#a8e63d" },
+  { n:"CORAL",  c:"#ff7a5c" }, { n:"AZURE", c:"#5a8cff" }
+];
+
+const SHAPE_SRC = [
+  ["#", 5.0],
+  ["##", 6.5], ["#\n#", 6.5],
+  ["###", 6.5], ["#\n#\n#", 6.5],
+  ["####", 3.4], ["#\n#\n#\n#", 3.4],
+  ["#####", 1.5], ["#\n#\n#\n#\n#", 1.5],
+  ["##\n##", 6.0],
+  ["###\n###", 2.4], ["##\n##\n##", 2.4],
+  ["###\n###\n###", 1.0],
+  ["##\n#.", 4.8], ["##\n.#", 4.8], ["#.\n##", 4.8], [".#\n##", 4.8],
+  ["#..\n###", 2.5], ["###\n..#", 2.5], ["###\n#..", 2.5], ["..#\n###", 2.5],
+  ["##\n#.\n#.", 2.5], ["##\n.#\n.#", 2.5], ["#.\n#.\n##", 2.5], [".#\n.#\n##", 2.5],
+  [".##\n##.", 1.8], ["##.\n.##", 1.8], ["#.\n##\n.#", 1.8], [".#\n##\n#.", 1.8],
+  ["###\n.#.", 2.4], [".#.\n###", 2.4], ["#.\n##\n#.", 2.4], [".#\n##\n.#", 2.4],
+  ["#..\n#..\n###", 1.1], ["###\n#..\n#..", 1.1], ["###\n..#\n..#", 1.1], ["..#\n..#\n###", 1.1],
+  [".#.\n###\n.#.", 0.7]
+];
+const SHAPES = SHAPE_SRC.map(([pat,w])=>{
+  const rows = pat.split("\n"), cells = [];
+  rows.forEach((r,y)=>{ for(let x=0;x<r.length;x++) if(r[x]==="#") cells.push([x,y]); });
+  return { cells, w:Math.max(...rows.map(r=>r.length)), h:rows.length, weight:w, n:cells.length };
+});
+
+const SPECIALS = [ {t:"gem",p:44}, {t:"x2",p:24}, {t:"star",p:20}, {t:"bomb",p:12} ];
+const RANKS = [[26,"LEGENDARY"],[21,"GODLIKE"],[17,"UNREAL"],[13,"INSANE"],[9,"AMAZING"],[6,"GREAT"],[3,"NICE"]];
+const MULTI = {2:"DOUBLE",3:"TRIPLE",4:"QUAD",5:"PENTA",6:"HEXA"};
+
+/* ------------------------------------------------------------------ State */
+const S = {
+  board:new Array(CELLS).fill(null), tray:[null,null,null],
+  score:0, shown:0, combo:0, bestCombo:0, bestChain:0,
+  lines:0, blocks:0, level:1, acc:0,
+  hammer:2, swap:2, nextHammer:20000, nextSwap:15000,
+  running:false, busy:false, over:false, paused:false, hammerMode:false, ver:0
+};
+const touch = ()=>{ S.ver++; };
+
+const META = {
+  best:store.get("best",0), bestCombo:store.get("bestCombo",0),
+  bestChain:store.get("bestChain",0), lines:store.get("lines",0), games:store.get("games",0)
+};
+const OPT = {
+  sound:store.get("o.sound",true), haptic:store.get("o.haptic",true),
+  fx:store.get("o.fx",true), snap:store.get("o.snap",true), hint:store.get("o.hint",true)
+};
+
+/* --------------------------------------------------------- Canvas & Layout */
+const cv = document.getElementById("game");
+const ctx = cv.getContext("2d",{alpha:true});
+let DPR=1, W=0, H=0, FAM="system-ui,sans-serif";
+const L = { bx:0, by:0, cell:0, size:0, trayY:0, trayH:0, slotW:0 };
+const spriteCache = new Map();
+let boardBase = null;
+
+function path(o,x,y,w,h,r){
+  o.beginPath();
+  if(o.roundRect){ o.roundRect(x,y,w,h,r); return; }
+  r = Math.min(r,w/2,h/2);
+  o.moveTo(x+r,y); o.arcTo(x+w,y,x+w,y+h,r); o.arcTo(x+w,y+h,x,y+h,r);
+  o.arcTo(x,y+h,x,y,r); o.arcTo(x,y,x+w,y,r); o.closePath();
+}
+const rr = (x,y,w,h,r)=>path(ctx,x,y,w,h,r);
+
+function resize(){
+  const r = document.getElementById("stage").getBoundingClientRect();
+  DPR = Math.min(window.devicePixelRatio||1, 2.5);
+  W = Math.max(1,r.width); H = Math.max(1,r.height);
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  const pad = 10;
+  const trayReserve = Math.min(146, Math.max(94, H*0.235));
+  L.size = Math.floor(Math.min(W - pad*2, H - trayReserve - pad));
+  L.cell = L.size/G;
+  L.bx = Math.round((W - L.size)/2);
+  L.by = Math.round(pad + Math.max(0,(H - trayReserve - pad - L.size)/2));
+  L.trayY = L.by + L.size + Math.max(12,(H - L.by - L.size)*0.16);
+  L.trayH = Math.max(58, H - L.trayY - 2);
+  L.slotW = W/3;
+
+  spriteCache.clear();
+  buildBoardBase();
+  try{ FAM = getComputedStyle(document.body).fontFamily; }catch(e){}
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", ()=>setTimeout(resize,120));
+window.addEventListener("load", ()=>setTimeout(resize,60));
+if(window.visualViewport) window.visualViewport.addEventListener("resize", resize);
+
+/* Leeres Raster: dezent eingelassene Mulden */
+function buildBoardBase(){
+  if(L.size < 8) return;
+  boardBase = document.createElement("canvas");
+  boardBase.width = Math.ceil(L.size*DPR); boardBase.height = Math.ceil(L.size*DPR);
+  const o = boardBase.getContext("2d");
+  o.setTransform(DPR,0,0,DPR,0,0);
+  const g = L.cell*0.05, s = L.cell-g*2, rad = L.cell*0.15;
+  for(let y=0;y<G;y++) for(let x=0;x<G;x++){
+    o.fillStyle = "rgba(0,0,0,.34)";
+    path(o, x*L.cell+g, y*L.cell+g, s, s, rad); o.fill();
+    o.fillStyle = "rgba(255,255,255,.05)";
+    path(o, x*L.cell+g, y*L.cell+g+s*0.86, s, s*0.14, rad*0.6); o.fill();
+  }
+}
+
+/* Klotziger Block: dunkle Grundfase, helle Lichtfase oben/links, satte Frontfläche.
+   Füllt die Zelle komplett — nebeneinanderliegende Blöcke berühren sich. */
+function paintBlock(o, s, ci){
+  const C = COLORS[ci] || COLORS[0];
+  const r = s*0.13, b = s*0.21;
+
+  o.fillStyle = C.d;
+  path(o, 0, 0, s, s, r); o.fill();
+
+  o.fillStyle = C.l;
+  path(o, 0, 0, s-b*0.95, s-b*0.95, r); o.fill();
+
+  o.fillStyle = C.f;
+  path(o, b*0.62, b*0.62, s-b*1.24, s-b*1.24, r*0.66); o.fill();
+
+  o.fillStyle = "rgba(255,255,255,.21)";
+  path(o, b*0.62+s*0.05, b*0.62+s*0.04, s-b*1.24-s*0.10, s*0.10, s*0.045); o.fill();
+}
+function blockSprite(ci, s){
+  const size = Math.max(4, Math.round(s));
+  const key = ci+"|"+size;
+  let c = spriteCache.get(key);
+  if(c) return c;
+  if(spriteCache.size > 140) spriteCache.clear();
+  c = document.createElement("canvas");
+  c.width = Math.ceil(size*DPR); c.height = Math.ceil(size*DPR);
+  const o = c.getContext("2d");
+  o.setTransform(DPR,0,0,DPR,0,0);
+  paintBlock(o, size, ci);
+  spriteCache.set(key, c);
+  return c;
+}
+
+/* ------------------------------------------------------------------ Audio */
+let AC = null;
+function audio(){
+  if(!OPT.sound) return null;
+  if(!AC){ try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } }
+  if(AC.state === "suspended") AC.resume();
+  return AC;
+}
+function tone(freq,dur,type,vol,slide){
+  const ac = audio(); if(!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type||"sine"; o.frequency.setValueAtTime(freq, ac.currentTime);
+  if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(40,freq+slide), ac.currentTime+dur);
+  g.gain.setValueAtTime(.0001, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(vol||.12, ac.currentTime+.012);
+  g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime+dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(); o.stop(ac.currentTime+dur+.02);
+}
+function noise(dur,vol){
+  const ac = audio(); if(!ac) return;
+  const n = Math.floor(ac.sampleRate*dur), buf = ac.createBuffer(1,n,ac.sampleRate), d = buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i] = (Math.random()*2-1)*Math.pow(1-i/n,2.2);
+  const src = ac.createBufferSource(); src.buffer = buf;
+  const f = ac.createBiquadFilter(); f.type="lowpass"; f.frequency.value=1200;
+  const g = ac.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(ac.destination); src.start();
+}
+const SFX = {
+  tap(){ tone(420,.045,"triangle",.06); },
+  lift(){ tone(560,.05,"sine",.06); },
+  place(n){ tone(150+n*16,.085,"square",.09,40); },
+  bad(){ tone(140,.11,"sawtooth",.06,-50); },
+  clear(step){ const b = 440*Math.pow(1.0595,Math.min(step,22)*2);
+    tone(b,.14,"triangle",.13); setTimeout(()=>tone(b*1.5,.16,"sine",.09),50); },
+  boom(){ noise(.34,.2); tone(85,.3,"sine",.15,-40); },
+  power(){ tone(620,.09,"square",.08); setTimeout(()=>tone(930,.12,"square",.07),65); },
+  perfect(){ [0,110,220,330].forEach((d,i)=>setTimeout(()=>tone(523*Math.pow(1.26,i),.28,"triangle",.13),d)); },
+  over(){ [0,130,260].forEach((d,i)=>setTimeout(()=>tone(320/(1+i*.32),.36,"sawtooth",.1,-35),d)); }
+};
+function buzz(p){ if(OPT.haptic && navigator.vibrate) try{ navigator.vibrate(p); }catch(e){} }
+
+/* ---------------------------------------------------------------- Effekte */
+const FX = { parts:[], pops:[], banners:[], shake:0, flash:0, pulse:0 };
+
+function spawnParts(cx,cy,ci,amount,power){
+  const C = COLORS[ci] || COLORS[0];
+  if(!OPT.fx) amount = Math.ceil(amount*0.4);
+  for(let i=0;i<amount;i++){
+    const a = Math.random()*Math.PI*2, sp = (.5+Math.random()*1.4)*power;
+    FX.parts.push({
+      x:cx, y:cy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - power*.55,
+      s:L.cell*(.2+Math.random()*.22), r:Math.random()*Math.PI, vr:(Math.random()-.5)*.28,
+      life:1, decay:.014+Math.random()*.012, f:C.f, l:C.l
+    });
+  }
+  if(FX.parts.length > 340) FX.parts.splice(0, FX.parts.length-340);
+}
+function pop(x,y,text,color,size){ FX.pops.push({x,y,text,c:color||"#fff",s:size||22,life:1,vy:-1.2}); }
+function banner(text,color,sub){
+  FX.banners.push({text,sub:sub||"",c:color||"#fff",t:0,life:1});
+  if(FX.banners.length>2) FX.banners.shift();
+}
+function shake(m){ FX.shake = Math.max(FX.shake, OPT.fx?m:m*.4); }
+
+/* ------------------------------------------------------------ Brett-Logik */
+const idx = (x,y)=> y*G+x;
+const inB = (x,y)=> x>=0 && y>=0 && x<G && y<G;
+function fillRatio(){ let n=0; for(let i=0;i<CELLS;i++) if(S.board[i]) n++; return n/CELLS; }
+function canPlace(sh,gx,gy){
+  if(!sh) return false;
+  for(const c of sh.cells){
+    const x=gx+c[0], y=gy+c[1];
+    if(x<0||y<0||x>=G||y>=G||S.board[y*G+x]) return false;
+  }
+  return true;
+}
+function anywhere(sh){
+  if(!sh) return false;
+  for(let y=0;y<=G-sh.h;y++) for(let x=0;x<=G-sh.w;x++) if(canPlace(sh,x,y)) return true;
+  return false;
+}
+const anyMove = ()=> S.tray.some(p=>p && anywhere(p.sh));
+
+const _tmp = new Uint8Array(CELLS);
+function previewLines(sh,gx,gy){
+  const t = _tmp;
+  for(let i=0;i<CELLS;i++) t[i] = S.board[i]?1:0;
+  for(const c of sh.cells) t[idx(gx+c[0],gy+c[1])] = 1;
+  const rows=[], cols=[];
+  for(let y=0;y<G;y++){ let f=true; for(let x=0;x<G;x++) if(!t[idx(x,y)]){f=false;break;} if(f) rows.push(y); }
+  for(let x=0;x<G;x++){ let f=true; for(let y=0;y<G;y++) if(!t[idx(x,y)]){f=false;break;} if(f) cols.push(x); }
+  return {rows,cols};
+}
+/* Reihen und Spalten, denen genau eine Zelle fehlt */
+function nearFull(){
+  const rows=[], cols=[];
+  for(let y=0;y<G;y++){ let e=0; for(let x=0;x<G;x++) if(!S.board[idx(x,y)]) e++; if(e===1) rows.push(y); }
+  for(let x=0;x<G;x++){ let e=0; for(let y=0;y<G;y++) if(!S.board[idx(x,y)]) e++; if(e===1) cols.push(x); }
+  return {rows,cols};
+}
+
+/* ============================================================================
+   Teile-Generator: prüft, ob ein Dreiersatz wirklich aufs Brett passt
+   ========================================================================== */
+let _bits = null, _bitsVer = -1;
+function boardBits(){
+  if(_bitsVer !== S.ver){
+    _bits = new Uint8Array(CELLS);
+    for(let i=0;i<CELLS;i++) _bits[i] = S.board[i]?1:0;
+    _bitsVer = S.ver;
+  }
+  return _bits;
+}
+function validPositions(b, sh){
+  const out = [];
+  for(let y=0;y<=G-sh.h;y++) for(let x=0;x<=G-sh.w;x++){
+    let ok = true;
+    for(const c of sh.cells) if(b[(y+c[1])*G+x+c[0]]){ ok=false; break; }
+    if(ok) out.push(x + y*G);
+  }
+  return out;
+}
+function applyAndClear(b, sh, x, y){
+  for(const c of sh.cells) b[(y+c[1])*G+x+c[0]] = 1;
+  const rows=[], cols=[];
+  for(let ry=0;ry<G;ry++){ let f=true; for(let rx=0;rx<G;rx++) if(!b[ry*G+rx]){f=false;break;} if(f) rows.push(ry); }
+  for(let cx=0;cx<G;cx++){ let f=true; for(let cy=0;cy<G;cy++) if(!b[cy*G+cx]){f=false;break;} if(f) cols.push(cx); }
+  rows.forEach(ry=>{ for(let rx=0;rx<G;rx++) b[ry*G+rx]=0; });
+  cols.forEach(cx=>{ for(let cy=0;cy<G;cy++) b[cy*G+cx]=0; });
+}
+/* Gibt es eine Reihenfolge, in der alle Teile Platz finden? */
+function seqOK(shapes, b, depth){
+  if(!shapes.length) return true;
+  if(!b){ b = boardBits().slice(); depth = 0; }
+  for(let si=0; si<shapes.length; si++){
+    const sh = shapes[si];
+    const rest = shapes.filter((_,i)=>i!==si);
+    const pos = validPositions(b, sh);
+    if(!pos.length) continue;
+    const lim = Math.min(pos.length, depth===0?22:14);
+    for(let k=0;k<lim;k++){
+      const j = k + ((Math.random()*(pos.length-k))|0);
+      const t = pos[k]; pos[k] = pos[j]; pos[j] = t;
+      const b2 = b.slice();
+      applyAndClear(b2, sh, pos[k]%G, (pos[k]/G)|0);
+      if(seqOK(rest, b2, depth+1)) return true;
+    }
+  }
+  return false;
+}
+/* Kann dieses Teil irgendwo mindestens eine Linie schließen? */
+function canClearWith(sh){
+  for(let y=0;y<=G-sh.h;y++) for(let x=0;x<=G-sh.w;x++){
+    if(!canPlace(sh,x,y)) continue;
+    const pv = previewLines(sh,x,y);
+    if(pv.rows.length || pv.cols.length) return true;
+  }
+  return false;
+}
+
+function pickShape(fill){
+  /* Je voller das Brett, desto seltener sperrige Teile */
+  const pressure = Math.max(0, fill-0.34)*2.9;
+  let total = 0;
+  const ws = SHAPES.map(s=>{
+    const w = s.weight / (1 + pressure*(s.n-1)*0.5);
+    total += w; return w;
+  });
+  let r = Math.random()*total;
+  for(let i=0;i<SHAPES.length;i++){ r -= ws[i]; if(r<=0) return SHAPES[i]; }
+  return SHAPES[0];
+}
+function rollSpecial(){
+  const chance = Math.min(.34, .10 + S.score/260000 + S.level*.006 + Math.min(.06, S.combo*.006));
+  if(Math.random() > chance) return null;
+  let t = Math.random()*100;
+  for(const s of SPECIALS){ t -= s.p; if(t<=0) return s.t; }
+  return "gem";
+}
+function makePiece(fill){
+  const sh = pickShape(fill);
+  const specials = {};
+  const sp = rollSpecial();
+  if(sp) specials[(Math.random()*sh.cells.length)|0] = sp;
+  return { sh, col:(Math.random()*COLORS.length)|0, specials, born:performance.now() };
+}
+
+/* Bewertet einen Dreiersatz: wie gut passt er aufs aktuelle Brett? */
+function setScore(set){
+  const b = boardBits();
+  let placeable = 0, spots = 0, clears = 0;
+  for(const p of set){
+    const pos = validPositions(b, p.sh);
+    if(pos.length){ placeable++; spots += Math.min(18, pos.length); }
+    if(pos.length && canClearWith(p.sh)) clears++;
+  }
+  let sc = placeable*22 + spots*0.5 + clears*14;
+  if(placeable === 3 && seqOK(set.map(p=>p.sh))) sc += 90;
+  return sc;
+}
+
+function refillTray(){
+  const fill = fillRatio();
+  /* Gelegentlich darf es sperrig werden — aber nie bei vollem Brett */
+  const hardChance = Math.min(.30, .04 + S.level*.02);
+  if(fill < 0.5 && Math.random() < hardChance){
+    for(let i=0;i<8;i++){
+      const set = [makePiece(fill),makePiece(fill),makePiece(fill)];
+      if(set.some(p=>anywhere(p.sh))){ S.tray = set; touch(); return; }
+    }
+  }
+  let best = null, bestSc = -1;
+  for(let i=0;i<10;i++){
+    const set = [makePiece(fill),makePiece(fill),makePiece(fill)];
+    const sc = setScore(set);
+    if(sc > bestSc){ bestSc = sc; best = set; }
+    if(sc >= 160) break;
+  }
+  S.tray = best || [makePiece(fill),makePiece(fill),makePiece(fill)];
+  touch();
+}
+
+/* ---------------------------------------------------------------- Scoring */
+const comboMult = ()=> 1 + .4*Math.max(0, Math.min(S.combo,30)-1);
+const LINE_BASE = n => Math.round(100*n*(1+.5*(n-1)));
+
+function addScore(v){
+  S.score += v;
+  if(S.score >= S.nextHammer){ S.hammer = Math.min(5,S.hammer+1); S.nextHammer += 20000; toast("🔨 Hammer erhalten"); SFX.power(); }
+  if(S.score >= S.nextSwap){ S.swap = Math.min(5,S.swap+1); S.nextSwap += 15000; toast("🔄 Tausch erhalten"); SFX.power(); }
+  const lv = 1 + Math.floor(S.score/12000);
+  if(lv > S.level){
+    S.level = lv; S.acc = (lv-1)%ACCENTS.length;
+    applyAccent();
+    banner("LEVEL "+lv, ACCENTS[S.acc].c, ACCENTS[S.acc].n);
+    SFX.power(); buzz([10,36,10]);
+  }
+  syncHud();
+}
+
+/* ------------------------------------------------- Platzieren und Auflösen */
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+async function placePiece(slot, gx, gy){
+  const p = S.tray[slot];
+  if(!p || !canPlace(p.sh,gx,gy)) return false;
+  S.busy = true;
+
+  const now = performance.now();
+  p.sh.cells.forEach((c,i)=>{
+    S.board[idx(gx+c[0],gy+c[1])] = { c:p.col, sp:p.specials[i]||null, t:now, clrAt:0, dly:0 };
+  });
+  touch();
+  S.blocks += p.sh.n;
+  addScore(p.sh.n*2);
+  S.tray[slot] = null;
+  SFX.place(p.sh.n); buzz(8);
+
+  const gained = await resolve();
+  if(gained === 0) S.combo = S.combo>=5 ? Math.floor(S.combo/2) : 0;
+  syncCombo();
+
+  if(S.tray.every(t=>!t)) refillTray();
+  save();
+  S.busy = false;
+  if(!anyMove()) gameOver();
+  return true;
+}
+
+function fullLines(){
+  const rows=[], cols=[];
+  for(let y=0;y<G;y++){ let f=true; for(let x=0;x<G;x++) if(!S.board[idx(x,y)]){f=false;break;} if(f) rows.push(y); }
+  for(let x=0;x<G;x++){ let f=true; for(let y=0;y<G;y++) if(!S.board[idx(x,y)]){f=false;break;} if(f) cols.push(x); }
+  return {rows,cols};
+}
+
+async function resolve(){
+  const fl = fullLines();
+  if(!fl.rows.length && !fl.cols.length) return 0;
+
+  S.combo++; S.bestCombo = Math.max(S.bestCombo,S.combo); syncCombo();
+  const nLines = fl.rows.length + fl.cols.length;
+  S.lines += nLines;
+
+  let pending = new Set();
+  fl.rows.forEach(y=>{ for(let x=0;x<G;x++) pending.add(idx(x,y)); });
+  fl.cols.forEach(x=>{ for(let y=0;y<G;y++) pending.add(idx(x,y)); });
+
+  let wave = 0, total = 0;
+
+  while(pending.size){
+    wave++;
+    const waveMult = 1 + .5*(wave-1);
+    let bonus = 0, mult = 1, bombs = 0;
+    const next = new Set();
+
+    for(const i of pending){
+      const c = S.board[i]; if(!c || !c.sp) continue;
+      const x = i%G, y = (i/G)|0;
+      if(c.sp === "gem") bonus += 300;
+      else if(c.sp === "x2") mult *= 2;
+      else if(c.sp === "star"){
+        bonus += 200;
+        for(let k=0;k<G;k++){ next.add(idx(k,y)); next.add(idx(x,k)); }
+      } else if(c.sp === "bomb"){
+        bonus += 150; bombs++;
+        for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++)
+          if(inB(x+dx,y+dy)) next.add(idx(x+dx,y+dy));
+      }
+    }
+
+    const base = wave===1 ? LINE_BASE(nLines)+pending.size*5 : 150*wave+pending.size*20;
+    const gained = Math.round((base+bonus)*waveMult*mult*comboMult());
+    total += gained;
+
+    let ax=0, ay=0;
+    for(const i of pending){ ax += i%G; ay += (i/G)|0; }
+    ax/=pending.size; ay/=pending.size;
+    const order = [...pending];
+    const t0 = performance.now();
+    let maxDly = 0;
+    for(const i of order){
+      const c = S.board[i]; if(!c) continue;
+      const d = Math.hypot(i%G-ax, ((i/G)|0)-ay);
+      c.dly = d*20; c.clrAt = t0 + c.dly;
+      if(c.dly > maxDly) maxDly = c.dly;
+    }
+
+    if(bombs){ SFX.boom(); shake(11+bombs*3); }
+    SFX.clear(S.combo+wave);
+    shake(4 + nLines*2.5 + wave*4);
+    buzz(bombs?[18,22,18]:14);
+    FX.pulse = Math.min(1, .3 + nLines*.12 + wave*.14);
+
+    /* eine ruhige Meldung statt vieler gleichzeitiger */
+    const tag = mult>1 ? "BOOST ×"+mult : "";
+    if(wave === 1){
+      if(nLines >= 2) banner(MULTI[Math.min(nLines,6)]||"MEGA BLAST", ACCENTS[S.acc].c, tag);
+      const rank = RANKS.find(r=>S.combo>=r[0]);
+      if(rank && S.combo === rank[0]) banner(rank[1], "#ffc93c", "COMBO ×"+S.combo);
+    } else {
+      banner("CHAIN ×"+wave, "#ffc93c", tag);
+      S.bestChain = Math.max(S.bestChain, wave);
+    }
+
+    await sleep(Math.min(400, 170+maxDly));
+    touch();
+
+    for(const i of order){
+      const c = S.board[i]; if(!c) continue;
+      spawnParts(L.bx+((i%G)+.5)*L.cell, L.by+(((i/G)|0)+.5)*L.cell, c.c, c.sp?9:5, c.sp?3.2:2.1);
+      S.board[i] = null;
+    }
+    FX.flash = Math.min(.7, .16+nLines*.05+wave*.1);
+    pop(W/2, L.by+L.size*.5, "+"+gained.toLocaleString("de-DE"),
+        wave>1 ? "#ffc93c" : "#ffffff", 30+Math.min(16,nLines*3+wave*4));
+    addScore(gained);
+    await sleep(wave>1?55:80);
+
+    const nxt = new Set();
+    for(const i of next) if(S.board[i]) nxt.add(i);
+    pending = nxt;
+  }
+
+  if(S.board.every(c=>!c)){
+    const pc = Math.round(5000*comboMult());
+    addScore(pc); total += pc;
+    banner("PERFECT CLEAR", "#ffc93c", "+"+pc.toLocaleString("de-DE"));
+    SFX.perfect(); shake(20); FX.flash = .8; FX.pulse = 1; buzz([26,44,26,44,54]);
+    for(let i=0;i<18;i++)
+      spawnParts(L.bx+Math.random()*L.size, L.by+Math.random()*L.size,
+                 (Math.random()*COLORS.length)|0, 4, 2.6);
+    await sleep(170);
+  }
+  return total;
+}
+
+/* ------------------------------------------------------------------ Input */
+const drag = { on:false, slot:-1, px:0, py:0, gx:0, gy:0, ok:false, lift:0, id:null };
+
+const trayRect = i => ({ x:i*L.slotW, y:L.trayY, w:L.slotW, h:L.trayH });
+const trayScale = sh => Math.min(L.slotW*0.76/sh.w, L.trayH*0.80/sh.h, L.cell*0.72);
+function pointAt(e){ const r = cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+
+/* Platzier-Hilfe: rutscht bis zu eine Zelle weit auf die nächste gültige Position */
+const SNAP = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+function dragGeom(){
+  const pc = S.tray[drag.slot]; if(!pc) return;
+  const sh = pc.sh;
+  const offY = L.cell*1.5*drag.lift;
+  const fx = (drag.px - L.bx - sh.w*L.cell/2)/L.cell;
+  const fy = (drag.py - offY - L.by - sh.h*L.cell/2)/L.cell;
+  const rx = Math.round(fx), ry = Math.round(fy);
+
+  if(canPlace(sh,rx,ry)){ drag.gx=rx; drag.gy=ry; drag.ok=true; return; }
+  if(OPT.snap){
+    let best = null, bd = 1e9;
+    for(const o of SNAP){
+      const x = rx+o[0], y = ry+o[1];
+      if(!canPlace(sh,x,y)) continue;
+      const d = (x-fx)*(x-fx) + (y-fy)*(y-fy);
+      if(d < bd){ bd = d; best = [x,y]; }
+    }
+    if(best && bd < 2.1){ drag.gx=best[0]; drag.gy=best[1]; drag.ok=true; return; }
+  }
+  drag.gx=rx; drag.gy=ry; drag.ok=false;
+}
+
+cv.addEventListener("pointerdown", e=>{
+  if(!S.running || S.busy || S.paused) return;
+  audio();
+  const p = pointAt(e);
+
+  if(S.hammerMode){
+    const gx = Math.floor((p.x-L.bx)/L.cell), gy = Math.floor((p.y-L.by)/L.cell);
+    if(inB(gx,gy) && S.board[idx(gx,gy)]){
+      const c = S.board[idx(gx,gy)];
+      spawnParts(L.bx+(gx+.5)*L.cell, L.by+(gy+.5)*L.cell, c.c, 12, 2.8);
+      S.board[idx(gx,gy)] = null; touch();
+      S.hammer--; S.hammerMode = false;
+      SFX.boom(); shake(8); buzz(18); syncHud(); save();
+    } else { S.hammerMode = false; syncHud(); }
+    return;
+  }
+
+  for(let i=0;i<3;i++){
+    const pc = S.tray[i]; if(!pc) continue;
+    const r = trayRect(i);
+    if(p.x>=r.x && p.x<=r.x+r.w && p.y>=r.y-10 && p.y<=r.y+r.h+10){
+      drag.on=true; drag.slot=i; drag.id=e.pointerId; drag.px=p.x; drag.py=p.y; drag.lift=0;
+      try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+      SFX.lift(); buzz(5); dragGeom();
+      return;
+    }
+  }
+}, {passive:true});
+
+cv.addEventListener("pointermove", e=>{
+  if(!drag.on || e.pointerId !== drag.id) return;
+  const p = pointAt(e); drag.px = p.x; drag.py = p.y; dragGeom();
+}, {passive:true});
+
+function endDrag(e){
+  if(!drag.on) return;
+  const slot = drag.slot, ok = drag.ok, gx = drag.gx, gy = drag.gy;
+  drag.on = false; drag.slot = -1; drag.id = null; drag.ok = false;
+  try{ cv.releasePointerCapture(e.pointerId); }catch(_){}
+  if(ok && S.tray[slot]) placePiece(slot,gx,gy);
+  else if(S.tray[slot]) SFX.bad();
+}
+cv.addEventListener("pointerup", endDrag);
+cv.addEventListener("pointercancel", ()=>{ drag.on=false; drag.slot=-1; drag.ok=false; });
+
+/* --------------------------------------------------------------- Zeichnen */
+function drawSpecial(cx,cy,s,sp){
+  const t = performance.now()/1000;
+  ctx.save();
+  ctx.translate(cx,cy);
+  const k = 1 + Math.sin(t*3.4)*.055;
+  ctx.scale(k,k);
+  ctx.fillStyle = "rgba(255,255,255,.95)";
+  if(sp === "gem"){
+    ctx.beginPath();
+    ctx.moveTo(0,-s*.23); ctx.lineTo(s*.18,0); ctx.lineTo(0,s*.23); ctx.lineTo(-s*.18,0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,.2)";
+    ctx.beginPath();
+    ctx.moveTo(0,-s*.1); ctx.lineTo(s*.08,0); ctx.lineTo(0,s*.1); ctx.lineTo(-s*.08,0);
+    ctx.closePath(); ctx.fill();
+  } else if(sp === "star"){
+    ctx.beginPath();
+    for(let i=0;i<10;i++){
+      const a = -Math.PI/2 + i*Math.PI/5, r = i%2 ? s*.1 : s*.25;
+      if(i) ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+      else ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r);
+    }
+    ctx.closePath(); ctx.fill();
+  } else if(sp === "bomb"){
+    ctx.fillStyle = "rgba(12,16,30,.9)";
+    ctx.beginPath(); ctx.arc(0,s*.02,s*.21,0,7); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.9)";
+    ctx.beginPath(); ctx.arc(-s*.07,-s*.05,s*.055,0,7); ctx.fill();
+  } else if(sp === "x2"){
+    ctx.fillStyle = "rgba(12,16,30,.55)";
+    path(ctx,-s*.24,-s*.15,s*.48,s*.3,s*.09); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "900 "+(s*.28)+"px "+FAM;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("×2",0,s*.01);
+  }
+  ctx.restore();
+}
+function drawBlock(x,y,s,ci,sp,alpha,glow){
+  ctx.save();
+  ctx.globalAlpha = alpha===undefined ? 1 : alpha;
+  if(glow && OPT.fx){ ctx.shadowColor = (COLORS[ci]||COLORS[0]).f; ctx.shadowBlur = s*.42; }
+  ctx.drawImage(blockSprite(ci,s), x, y, s, s);
+  ctx.shadowBlur = 0;
+  if(sp) drawSpecial(x+s/2, y+s/2, s, sp);
+  ctx.restore();
+}
+
+let bgT = 0;
+function hexA(hex,a){
+  const h = hex.replace("#","");
+  return "rgba("+parseInt(h.substr(0,2),16)+","+parseInt(h.substr(2,2),16)+","+parseInt(h.substr(4,2),16)+","+a+")";
+}
+function drawBg(){
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#0b0f1e"); g.addColorStop(1,"#141b30");
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  if(OPT.fx){
+    bgT += .004;
+    const acc = ACCENTS[S.acc].c;
+    const y = L.by + L.size*.5 + Math.sin(bgT)*L.size*.06;
+    const rg = ctx.createRadialGradient(W/2,y,0,W/2,y,Math.max(60,L.size*.92));
+    rg.addColorStop(0, hexA(acc,.075)); rg.addColorStop(1, hexA(acc,0));
+    ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+  }
+}
+
+function drawBoard(){
+  const acc = ACCENTS[S.acc].c;
+  const bs = 1 + FX.pulse*.012;
+
+  ctx.save();
+  ctx.translate(L.bx+L.size/2, L.by+L.size/2);
+  ctx.scale(bs,bs);
+  ctx.translate(-(L.bx+L.size/2), -(L.by+L.size/2));
+
+  ctx.fillStyle = "rgba(0,0,0,.22)";
+  rr(L.bx-7, L.by-7, L.size+14, L.size+14, 20); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.lineWidth = 1.5;
+  rr(L.bx-7, L.by-7, L.size+14, L.size+14, 20); ctx.stroke();
+
+  let hl = null;
+  if(drag.on && drag.ok){
+    const pc = S.tray[drag.slot];
+    if(pc) hl = previewLines(pc.sh, drag.gx, drag.gy);
+  }
+  if(hl && (hl.rows.length || hl.cols.length)){
+    ctx.fillStyle = hexA(acc, .2 + Math.sin(performance.now()/130)*.06);
+    hl.rows.forEach(y=> ctx.fillRect(L.bx, L.by+y*L.cell, L.size, L.cell));
+    hl.cols.forEach(x=> ctx.fillRect(L.bx+x*L.cell, L.by, L.cell, L.size));
+  }
+
+  if(boardBase) ctx.drawImage(boardBase, L.bx, L.by, L.size, L.size);
+
+  /* Markierung für Linien, denen nur eine Zelle fehlt */
+  if(OPT.hint && !drag.on){
+    const nf = nearFull();
+    if(nf.rows.length || nf.cols.length){
+      ctx.fillStyle = hexA(acc,.5);
+      const t = 3, o = 5;
+      nf.rows.forEach(y=>{
+        rr(L.bx-o-t, L.by+y*L.cell+L.cell*.22, t, L.cell*.56, t/2); ctx.fill();
+        rr(L.bx+L.size+o, L.by+y*L.cell+L.cell*.22, t, L.cell*.56, t/2); ctx.fill();
+      });
+      nf.cols.forEach(x=>{
+        rr(L.bx+x*L.cell+L.cell*.22, L.by-o-t, L.cell*.56, t, t/2); ctx.fill();
+        rr(L.bx+x*L.cell+L.cell*.22, L.by+L.size+o, L.cell*.56, t, t/2); ctx.fill();
+      });
+    }
+  }
+
+  const now = performance.now();
+  for(let y=0;y<G;y++) for(let x=0;x<G;x++){
+    const c = S.board[idx(x,y)]; if(!c) continue;
+    const px = L.bx+x*L.cell, py = L.by+y*L.cell;
+    let sc = 1, flash = 0;
+    const age = now-c.t;
+    if(age < 150){ const k = age/150; sc = .7+.3*(1-Math.pow(1-k,3))+Math.sin(k*Math.PI)*.07; }
+    if(c.clrAt){
+      const k = (now-c.clrAt)/190;
+      if(k > 0){ flash = Math.min(1,k); sc *= 1+.2*Math.sin(flash*Math.PI); }
+    }
+    ctx.save();
+    ctx.translate(px+L.cell/2, py+L.cell/2); ctx.scale(sc,sc); ctx.translate(-L.cell/2,-L.cell/2);
+    drawBlock(0,0,L.cell,c.c,c.sp,1, !!c.sp || flash>0);
+    if(flash > 0){
+      ctx.globalAlpha = .75*flash; ctx.fillStyle = "#fff";
+      rr(0,0,L.cell,L.cell,L.cell*.13); ctx.fill(); ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  if(drag.on){
+    const pc = S.tray[drag.slot];
+    if(pc){
+      for(const cc of pc.sh.cells){
+        const x = drag.gx+cc[0], y = drag.gy+cc[1];
+        if(!inB(x,y)) continue;
+        const px = L.bx+x*L.cell, py = L.by+y*L.cell;
+        if(!drag.ok){
+          ctx.fillStyle = "rgba(255,70,90,.18)";
+          rr(px+2,py+2,L.cell-4,L.cell-4,L.cell*.13); ctx.fill();
+        } else {
+          drawBlock(px,py,L.cell,pc.col,null,.38,false);
+          ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 2;
+          rr(px+1.5,py+1.5,L.cell-3,L.cell-3,L.cell*.12); ctx.stroke();
+        }
+      }
+    }
+  }
+
+  if(S.hammerMode){
+    ctx.fillStyle = "rgba(255,201,60,"+(.05+Math.sin(performance.now()/210)*.04)+")";
+    ctx.fillRect(L.bx,L.by,L.size,L.size);
+  }
+  ctx.restore();
+}
+
+function drawTray(){
+  for(let i=0;i<3;i++){
+    const pc = S.tray[i]; if(!pc || (drag.on && drag.slot===i)) continue;
+    const r = trayRect(i), s = trayScale(pc.sh);
+    const ox = r.x+(r.w-pc.sh.w*s)/2, oy = r.y+(r.h-pc.sh.h*s)/2;
+    const k = Math.min(1,(performance.now()-pc.born)/240);
+    const sc = .62+.38*(1-Math.pow(1-k,3));
+    if(pc._v !== S.ver){ pc._v = S.ver; pc._dead = !anywhere(pc.sh); }
+    ctx.save();
+    ctx.globalAlpha = (pc._dead?.28:1)*Math.min(1,k*2);
+    ctx.translate(ox+pc.sh.w*s/2, oy+pc.sh.h*s/2 + (1-k)*14);
+    ctx.scale(sc,sc);
+    ctx.translate(-pc.sh.w*s/2, -pc.sh.h*s/2);
+    for(let ci=0;ci<pc.sh.cells.length;ci++){
+      const cc = pc.sh.cells[ci];
+      drawBlock(cc[0]*s, cc[1]*s, s, pc.col, pc.specials[ci]||null, 1, false);
+    }
+    ctx.restore();
+  }
+  if(drag.on){
+    const pc = S.tray[drag.slot];
+    if(pc){
+      const s = L.cell, offY = L.cell*1.5*drag.lift;
+      const ox = drag.px-pc.sh.w*s/2, oy = drag.py-offY-pc.sh.h*s/2;
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
+      for(let ci=0;ci<pc.sh.cells.length;ci++){
+        const cc = pc.sh.cells[ci];
+        drawBlock(ox+cc[0]*s, oy+cc[1]*s, s, pc.col, pc.specials[ci]||null, 1, false);
+      }
+      ctx.restore();
+    }
+  }
+}
+
+function drawFX(){
+  for(let i=FX.parts.length-1;i>=0;i--){
+    const p = FX.parts[i];
+    p.x += p.vx; p.y += p.vy; p.vy += .42; p.vx *= .99;
+    p.r += p.vr; p.life -= p.decay;
+    if(p.life<=0 || p.y>H+50){ FX.parts.splice(i,1); continue; }
+    ctx.save();
+    ctx.globalAlpha = Math.max(0,Math.min(1,p.life*1.4));
+    ctx.translate(p.x,p.y); ctx.rotate(p.r);
+    ctx.fillStyle = p.f;
+    path(ctx,-p.s/2,-p.s/2,p.s,p.s,p.s*.2); ctx.fill();
+    ctx.fillStyle = p.l;
+    path(ctx,-p.s/2,-p.s/2,p.s*.6,p.s*.6,p.s*.16); ctx.fill();
+    ctx.restore();
+  }
+  for(let i=FX.pops.length-1;i>=0;i--){
+    const p = FX.pops[i];
+    p.y += p.vy; p.vy *= .96; p.life -= .02;
+    if(p.life<=0){ FX.pops.splice(i,1); continue; }
+    const k = Math.min(1,(1-p.life)*6);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1,p.life*1.7);
+    ctx.font = "800 "+(p.s*(.78+.22*k))+"px "+FAM;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.lineWidth = 5; ctx.strokeStyle = "rgba(8,11,22,.7)";
+    ctx.strokeText(p.text,p.x,p.y);
+    ctx.fillStyle = p.c; ctx.fillText(p.text,p.x,p.y);
+    ctx.restore();
+  }
+  for(let i=FX.banners.length-1;i>=0;i--){
+    const b = FX.banners[i];
+    b.t += .016; b.life -= .014;
+    if(b.life<=0){ FX.banners.splice(i,1); continue; }
+    const inK = Math.min(1,b.t*8);
+    const sc = .78+.22*(1-Math.pow(1-inK,4));
+    const y = L.by+L.size*.2 - i*40;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1,b.life*2.4);
+    ctx.translate(W/2,y); ctx.scale(sc,sc);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = "800 30px "+FAM;
+    ctx.lineWidth = 6; ctx.strokeStyle = "rgba(8,11,22,.75)";
+    ctx.strokeText(b.text,0,0);
+    ctx.fillStyle = b.c; ctx.fillText(b.text,0,0);
+    if(b.sub){
+      ctx.font = "800 11px "+FAM;
+      ctx.fillStyle = "rgba(255,255,255,.6)";
+      ctx.fillText(b.sub.toUpperCase(),0,22);
+    }
+    ctx.restore();
+  }
+}
+
+function frame(){
+  requestAnimationFrame(frame);
+  if(W===0 || !boardBase) resize();
+
+  if(drag.on && drag.lift < 1){ drag.lift = Math.min(1, drag.lift+.22); dragGeom(); }
+
+  if(S.shown !== S.score){
+    const d = S.score-S.shown;
+    S.shown += Math.max(1, Math.ceil(Math.abs(d)*.2))*Math.sign(d);
+    if(Math.abs(S.score-S.shown) < 2) S.shown = S.score;
+    elScore.textContent = S.shown.toLocaleString("de-DE");
+  }
+
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+  drawBg();
+
+  let sx=0, sy=0;
+  if(FX.shake > .3){ sx=(Math.random()-.5)*FX.shake; sy=(Math.random()-.5)*FX.shake; FX.shake *= .84; }
+  else FX.shake = 0;
+  FX.pulse *= .90;
+
+  ctx.save(); ctx.translate(sx,sy);
+  drawBoard(); drawTray(); drawFX();
+  ctx.restore();
+
+  if(FX.flash > .01){
+    ctx.fillStyle = "rgba(255,255,255,"+(FX.flash*.3)+")";
+    ctx.fillRect(0,0,W,H);
+    FX.flash *= .8;
+  } else FX.flash = 0;
+}
+
+/* -------------------------------------------------------------- HUD / UI */
+const $ = id => document.getElementById(id);
+const elScore = $("score"), elBest = $("best"), elLvl = $("lvl");
+const elComboBar = $("comboBar"), elComboTxt = $("comboTxt"), elComboFill = $("comboFill");
+
+function applyAccent(){
+  document.documentElement.style.setProperty("--acc", ACCENTS[S.acc].c);
+}
+function syncHud(){
+  elBest.textContent = Math.max(META.best,S.score).toLocaleString("de-DE");
+  elLvl.textContent = S.level;
+  $("cHammer").textContent = S.hammer;
+  $("cSwap").textContent = S.swap;
+  $("pwHammer").classList.toggle("empty", S.hammer<=0);
+  $("pwSwap").classList.toggle("empty", S.swap<=0);
+  $("pwHammer").classList.toggle("active", S.hammerMode);
+  elScore.classList.add("bump");
+  setTimeout(()=>elScore.classList.remove("bump"),90);
+}
+function syncCombo(){
+  if(S.combo >= 2){
+    elComboBar.classList.add("on");
+    elComboTxt.textContent = "COMBO ×"+S.combo+"  "+comboMult().toFixed(1)+"×";
+    elComboFill.style.width = Math.min(100,(S.combo/22)*100)+"%";
+  } else elComboBar.classList.remove("on");
+}
+let toastT = null;
+function toast(m){
+  const t = $("toast"); t.textContent = m; t.classList.add("on");
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove("on"),1600);
+}
+const show = id => $(id).classList.remove("hide");
+const hide = id => $(id).classList.add("hide");
+
+/* ------------------------------------------------------------- Steuerung */
+function newGame(){
+  S.board = new Array(CELLS).fill(null);
+  S.tray = [null,null,null];
+  S.score=0; S.shown=0; S.combo=0; S.bestCombo=0; S.bestChain=0;
+  S.lines=0; S.blocks=0; S.level=1; S.acc=0;
+  S.hammer=2; S.swap=2; S.nextHammer=20000; S.nextSwap=15000;
+  S.over=false; S.busy=false; S.paused=false; S.hammerMode=false;
+  FX.parts.length=0; FX.pops.length=0; FX.banners.length=0;
+  touch(); applyAccent(); refillTray();
+  elScore.textContent = "0";
+  S.running = true;
+  syncHud(); syncCombo();
+  META.games++; store.set("games",META.games);
+  save();
+}
+function gameOver(){
+  if(S.over) return;
+  S.over = true; S.running = false;
+  SFX.over(); buzz([36,54,36]); shake(10);
+  const isBest = S.score > META.best;
+  if(isBest){ META.best = S.score; store.set("best",META.best); }
+  if(S.bestCombo > META.bestCombo){ META.bestCombo = S.bestCombo; store.set("bestCombo",META.bestCombo); }
+  if(S.bestChain > META.bestChain){ META.bestChain = S.bestChain; store.set("bestChain",META.bestChain); }
+  META.lines += S.lines; store.set("lines",META.lines);
+  store.del("save");
+  $("oScore").textContent = S.score.toLocaleString("de-DE");
+  $("oMeta").textContent = "Combo ×"+S.bestCombo+" · "+S.lines+" Linien · Level "+S.level;
+  $("oNewBest").style.display = isBest ? "" : "none";
+  setTimeout(()=>show("scOver"), 560);
+}
+function save(){
+  if(!S.running) return;
+  store.set("save",{
+    b:S.board, sc:S.score, cb:S.combo, bc:S.bestCombo, ch:S.bestChain,
+    li:S.lines, bl:S.blocks, lv:S.level, ac:S.acc,
+    h:S.hammer, w:S.swap, nh:S.nextHammer, ns:S.nextSwap,
+    t:S.tray.map(p=>p?{i:SHAPES.indexOf(p.sh),c:p.col,s:p.specials}:null)
+  });
+}
+function loadSave(){
+  const d = store.get("save",null);
+  if(!d || !d.b || d.b.length !== CELLS) return false;
+  S.board = d.b.map(c=> c ? {c:c.c, sp:c.sp||null, t:0, clrAt:0, dly:0} : null);
+  S.score = d.sc||0; S.shown = S.score; S.combo = d.cb||0; S.bestCombo = d.bc||0;
+  S.bestChain = d.ch||0; S.lines = d.li||0; S.blocks = d.bl||0;
+  S.level = d.lv||1; S.acc = d.ac||0;
+  S.hammer = (d.h===undefined?2:d.h); S.swap = (d.w===undefined?2:d.w);
+  S.nextHammer = d.nh||20000; S.nextSwap = d.ns||15000;
+  S.tray = (d.t||[]).map(p=> p && SHAPES[p.i] ? {sh:SHAPES[p.i], col:p.c, specials:p.s||{}, born:0} : null);
+  while(S.tray.length < 3) S.tray.push(null);
+  touch();
+  if(S.tray.every(t=>!t)) refillTray();
+  S.over=false; S.running=true; S.busy=false; S.hammerMode=false;
+  elScore.textContent = S.score.toLocaleString("de-DE");
+  applyAccent(); syncHud(); syncCombo();
+  return true;
+}
+
+/* ------------------------------------------------------------ Verdrahtung */
+function refreshMenu(){
+  $("sBest").textContent = META.best.toLocaleString("de-DE");
+  $("btnResume").style.display = store.get("save",null) ? "" : "none";
+}
+function refreshStats(){
+  $("tBest").textContent = META.best.toLocaleString("de-DE");
+  $("tCombo").textContent = "×"+META.bestCombo;
+  $("tChain").textContent = "×"+META.bestChain;
+  $("tLines").textContent = META.lines.toLocaleString("de-DE");
+  $("tGames").textContent = META.games;
+}
+
+$("btnPlay").onclick = ()=>{ audio(); SFX.tap(); newGame(); hide("scStart"); };
+$("btnResume").onclick = ()=>{ audio(); SFX.tap(); if(!loadSave()) newGame(); hide("scStart"); };
+$("btnRules").onclick = ()=>{ SFX.tap(); show("scRules"); };
+$("btnRulesBack").onclick = ()=>{ SFX.tap(); hide("scRules"); };
+$("btnStats").onclick = ()=>{ SFX.tap(); refreshStats(); show("scStats"); };
+$("btnStatsBack").onclick = ()=>{ SFX.tap(); hide("scStats"); };
+$("btnSettings").onclick = ()=>{ SFX.tap(); show("scOpt"); };
+$("btnPSettings").onclick = ()=>{ SFX.tap(); show("scOpt"); };
+$("btnOptBack").onclick = ()=>{ SFX.tap(); hide("scOpt"); };
+$("btnPause").onclick = ()=>{
+  if(!S.running || S.over) return;
+  S.paused = true; $("pScore").textContent = S.score.toLocaleString("de-DE");
+  SFX.tap(); show("scPause");
+};
+$("btnContinue").onclick = ()=>{ S.paused=false; SFX.tap(); hide("scPause"); };
+$("btnQuit").onclick = ()=>{ S.paused=false; hide("scPause"); gameOver(); };
+$("btnAgain").onclick = ()=>{ SFX.tap(); newGame(); hide("scOver"); };
+$("btnHome").onclick = ()=>{ SFX.tap(); hide("scOver"); refreshMenu(); show("scStart"); };
+
+$("pwHammer").onclick = ()=>{
+  if(!S.running || S.busy || S.paused) return;
+  if(S.hammer <= 0){ toast("Kein Hammer — alle 20.000 Punkte gibt es einen"); SFX.bad(); return; }
+  S.hammerMode = !S.hammerMode; SFX.tap(); syncHud();
+  if(S.hammerMode) toast("Block antippen zum Entfernen");
+};
+$("pwSwap").onclick = ()=>{
+  if(!S.running || S.busy || S.paused) return;
+  if(S.swap <= 0){ toast("Kein Tausch — alle 15.000 Punkte gibt es einen"); SFX.bad(); return; }
+  S.swap--; S.hammerMode = false;
+  const keep = S.tray.map(p=>!!p);
+  refillTray();
+  for(let i=0;i<3;i++) if(!keep[i]) S.tray[i] = null;
+  SFX.power(); buzz(12); syncHud(); save();
+  if(!anyMove()) gameOver();
+};
+
+function bindSwitch(id,key){
+  const el = $(id);
+  el.classList.toggle("on", !!OPT[key]);
+  el.onclick = ()=>{
+    OPT[key] = !OPT[key];
+    el.classList.toggle("on", OPT[key]);
+    store.set("o."+key, OPT[key]);
+    if(key==="sound" && OPT.sound){ audio(); SFX.tap(); }
+    if(key==="haptic" && OPT.haptic) buzz(12);
+  };
+}
+["swSound|sound","swHaptic|haptic","swFx|fx","swSnap|snap","swHint|hint"]
+  .forEach(s=>{ const p = s.split("|"); bindSwitch(p[0],p[1]); });
+
+$("btnWipe").onclick = ()=>{
+  if(!confirm("Highscore und alle Statistiken wirklich löschen?")) return;
+  META.best=0; META.bestCombo=0; META.bestChain=0; META.lines=0; META.games=0;
+  ["best","bestCombo","bestChain","lines","games","save"].forEach(k=>store.del(k));
+  refreshMenu(); refreshStats(); syncHud(); toast("Statistiken gelöscht");
+};
+
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) save(); });
+window.addEventListener("pagehide", save);
+
+/* ------------------------------------------------------------------ Start */
+resize(); applyAccent(); refreshMenu(); syncHud();
+requestAnimationFrame(frame);
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=> navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
